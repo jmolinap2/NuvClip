@@ -70,6 +70,7 @@ class DownloadEnginePlugin :
                     thumbnailUrl = info.thumbnail,
                     durationSeconds = info.duration.toLong(),
                     formats = YtDlpEngine.toFormatOptions(info),
+                    audioFormats = YtDlpEngine.toAudioFormatOptions(info),
                 )
                 AnalysisResult(video = analysis)
             } catch (error: Exception) {

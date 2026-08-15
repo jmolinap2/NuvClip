@@ -110,6 +110,8 @@ int _deepHash(Object? value) {
 enum SourcePlatform {
   tiktok,
   instagram,
+  facebook,
+  youtube,
   unknown,
 }
 
@@ -207,6 +209,7 @@ class VideoAnalysis {
     this.thumbnailUrl,
     required this.durationSeconds,
     required this.formats,
+    required this.audioFormats,
   });
 
   String sourceUrl;
@@ -223,6 +226,11 @@ class VideoAnalysis {
 
   List<VideoFormatOption> formats;
 
+  /// Calidades de solo-audio (extraccion con ffmpeg), separadas de [formats]
+  /// porque no tienen altura y se seleccionan desde un modo aparte en la UI
+  /// ("Video" / "Solo audio").
+  List<VideoFormatOption> audioFormats;
+
   List<Object?> _toList() {
     return <Object?>[
       sourceUrl,
@@ -232,6 +240,7 @@ class VideoAnalysis {
       thumbnailUrl,
       durationSeconds,
       formats,
+      audioFormats,
     ];
   }
 
@@ -248,6 +257,7 @@ class VideoAnalysis {
       thumbnailUrl: result[4] as String?,
       durationSeconds: result[5]! as int,
       formats: (result[6]! as List<Object?>).cast<VideoFormatOption>(),
+      audioFormats: (result[7]! as List<Object?>).cast<VideoFormatOption>(),
     );
   }
 
@@ -260,7 +270,7 @@ class VideoAnalysis {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(sourceUrl, other.sourceUrl) && _deepEquals(platform, other.platform) && _deepEquals(title, other.title) && _deepEquals(author, other.author) && _deepEquals(thumbnailUrl, other.thumbnailUrl) && _deepEquals(durationSeconds, other.durationSeconds) && _deepEquals(formats, other.formats);
+    return _deepEquals(sourceUrl, other.sourceUrl) && _deepEquals(platform, other.platform) && _deepEquals(title, other.title) && _deepEquals(author, other.author) && _deepEquals(thumbnailUrl, other.thumbnailUrl) && _deepEquals(durationSeconds, other.durationSeconds) && _deepEquals(formats, other.formats) && _deepEquals(audioFormats, other.audioFormats);
   }
 
   @override
@@ -269,7 +279,7 @@ class VideoAnalysis {
 
   @override
   String toString() {
-    return 'VideoAnalysis(sourceUrl: $sourceUrl, platform: $platform, title: $title, author: $author, thumbnailUrl: $thumbnailUrl, durationSeconds: $durationSeconds, formats: $formats)';
+    return 'VideoAnalysis(sourceUrl: $sourceUrl, platform: $platform, title: $title, author: $author, thumbnailUrl: $thumbnailUrl, durationSeconds: $durationSeconds, formats: $formats, audioFormats: $audioFormats)';
   }
 }
 
@@ -341,6 +351,7 @@ class DownloadRequest {
     required this.formatId,
     required this.suggestedFileName,
     required this.wifiOnly,
+    required this.audioOnly,
     this.approxTotalBytes,
   });
 
@@ -361,6 +372,12 @@ class DownloadRequest {
 
   bool wifiOnly;
 
+  /// true = extraer solo el audio (yt-dlp -x + ffmpeg) en vez del video
+  /// completo; [formatId] en ese caso es uno de los ids sinteticos de
+  /// [VideoAnalysis.audioFormats] ("audio-192", etc.), no un formato real de
+  /// yt-dlp.
+  bool audioOnly;
+
   /// Tamaño aproximado que ya se conocia desde el analisis (seccion 4, Vista
   /// previa). Se reenvia para que el progreso pueda mostrar MB descargados
   /// sin que Kotlin tenga que volver a inferirlo.
@@ -374,6 +391,7 @@ class DownloadRequest {
       formatId,
       suggestedFileName,
       wifiOnly,
+      audioOnly,
       approxTotalBytes,
     ];
   }
@@ -390,7 +408,8 @@ class DownloadRequest {
       formatId: result[3]! as String,
       suggestedFileName: result[4]! as String,
       wifiOnly: result[5]! as bool,
-      approxTotalBytes: result[6] as int?,
+      audioOnly: result[6]! as bool,
+      approxTotalBytes: result[7] as int?,
     );
   }
 
@@ -403,7 +422,7 @@ class DownloadRequest {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(downloadId, other.downloadId) && _deepEquals(sourceUrl, other.sourceUrl) && _deepEquals(platform, other.platform) && _deepEquals(formatId, other.formatId) && _deepEquals(suggestedFileName, other.suggestedFileName) && _deepEquals(wifiOnly, other.wifiOnly) && _deepEquals(approxTotalBytes, other.approxTotalBytes);
+    return _deepEquals(downloadId, other.downloadId) && _deepEquals(sourceUrl, other.sourceUrl) && _deepEquals(platform, other.platform) && _deepEquals(formatId, other.formatId) && _deepEquals(suggestedFileName, other.suggestedFileName) && _deepEquals(wifiOnly, other.wifiOnly) && _deepEquals(audioOnly, other.audioOnly) && _deepEquals(approxTotalBytes, other.approxTotalBytes);
   }
 
   @override
@@ -412,7 +431,7 @@ class DownloadRequest {
 
   @override
   String toString() {
-    return 'DownloadRequest(downloadId: $downloadId, sourceUrl: $sourceUrl, platform: $platform, formatId: $formatId, suggestedFileName: $suggestedFileName, wifiOnly: $wifiOnly, approxTotalBytes: $approxTotalBytes)';
+    return 'DownloadRequest(downloadId: $downloadId, sourceUrl: $sourceUrl, platform: $platform, formatId: $formatId, suggestedFileName: $suggestedFileName, wifiOnly: $wifiOnly, audioOnly: $audioOnly, approxTotalBytes: $approxTotalBytes)';
   }
 }
 

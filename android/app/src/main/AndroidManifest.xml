@@ -32,8 +32,8 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- Enlaces recibidos desde el menu Compartir de TikTok, Instagram o
-                 el navegador (seccion 3 del requerimiento). -->
+            <!-- Enlaces recibidos desde el menu Compartir de TikTok, Instagram,
+                 Facebook, YouTube o el navegador (seccion 3 del requerimiento). -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

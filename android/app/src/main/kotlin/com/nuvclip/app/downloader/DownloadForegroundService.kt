@@ -45,6 +45,7 @@ class DownloadForegroundService : Service() {
         val suggestedFileName: String,
         val wifiOnly: Boolean,
         val approxTotalBytes: Long?,
+        val audioOnly: Boolean,
     )
 
     override fun onCreate() {
@@ -68,7 +69,10 @@ class DownloadForegroundService : Service() {
         val downloadId = extras.getString(EXTRA_DOWNLOAD_ID) ?: return START_NOT_STICKY
 
         pendingCount.incrementAndGet()
-        startForeground(NOTIFICATION_ID, buildNotification(extras.getString(EXTRA_FILE_NAME) ?: downloadId, 0, true))
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification(extras.getString(EXTRA_FILE_NAME) ?: downloadId, 0, true, extras.getBoolean(EXTRA_AUDIO_ONLY, false)),
+        )
 
         queue.trySend(
             QueuedDownload(
@@ -78,6 +82,7 @@ class DownloadForegroundService : Service() {
                 suggestedFileName = extras.getString(EXTRA_FILE_NAME)!!,
                 wifiOnly = extras.getBoolean(EXTRA_WIFI_ONLY, false),
                 approxTotalBytes = extras.getLong(EXTRA_TOTAL_BYTES, -1L).takeIf { it > 0 },
+                audioOnly = extras.getBoolean(EXTRA_AUDIO_ONLY, false),
             )
         )
         return START_NOT_STICKY
@@ -101,11 +106,11 @@ class DownloadForegroundService : Service() {
         }
 
         val outputTemplate = File(outputDir, "${item.downloadId}.%(ext)s").absolutePath
-        updateNotification(item.suggestedFileName, 0, indeterminate = true)
+        updateNotification(item.suggestedFileName, 0, indeterminate = true, audioOnly = item.audioOnly)
 
         var lastEmitAt = 0L
         try {
-            val request = YtDlpEngine.buildDownloadRequest(item.sourceUrl, item.formatId, outputTemplate)
+            val request = YtDlpEngine.buildDownloadRequest(item.sourceUrl, item.formatId, outputTemplate, item.audioOnly)
             YoutubeDL.getInstance().execute(request, item.downloadId) { percent, etaSeconds, _ ->
                 val now = System.currentTimeMillis()
                 // yt-dlp reporta progreso muchas veces por segundo en redes
@@ -118,7 +123,7 @@ class DownloadForegroundService : Service() {
                     item.downloadId, percent.toDouble(), etaSeconds.takeIf { it > 0 },
                     downloaded, item.approxTotalBytes,
                 )
-                updateNotification(item.suggestedFileName, percent.toInt(), indeterminate = false)
+                updateNotification(item.suggestedFileName, percent.toInt(), indeterminate = false, audioOnly = item.audioOnly)
             }
 
             val producedFile = outputDir.listFiles { file -> file.name.startsWith("${item.downloadId}.") }?.firstOrNull()
@@ -158,18 +163,18 @@ class DownloadForegroundService : Service() {
         manager.createNotificationChannel(channel)
     }
 
-    private fun updateNotification(fileName: String, progress: Int, indeterminate: Boolean) {
+    private fun updateNotification(fileName: String, progress: Int, indeterminate: Boolean, audioOnly: Boolean) {
         val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, buildNotification(fileName, progress, indeterminate))
+        manager.notify(NOTIFICATION_ID, buildNotification(fileName, progress, indeterminate, audioOnly))
     }
 
-    private fun buildNotification(fileName: String, progress: Int, indeterminate: Boolean): Notification {
+    private fun buildNotification(fileName: String, progress: Int, indeterminate: Boolean, audioOnly: Boolean): Notification {
         val openApp = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Descargando video")
+            .setContentTitle(if (audioOnly) "Descargando audio" else "Descargando video")
             .setContentText(fileName)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
@@ -198,6 +203,7 @@ class DownloadForegroundService : Service() {
         const val EXTRA_FILE_NAME = "fileName"
         const val EXTRA_WIFI_ONLY = "wifiOnly"
         const val EXTRA_TOTAL_BYTES = "totalBytes"
+        const val EXTRA_AUDIO_ONLY = "audioOnly"
 
         private val cancelledIds = Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
 
@@ -208,6 +214,7 @@ class DownloadForegroundService : Service() {
                 putExtra(EXTRA_FORMAT_ID, request.formatId)
                 putExtra(EXTRA_FILE_NAME, request.suggestedFileName)
                 putExtra(EXTRA_WIFI_ONLY, request.wifiOnly)
+                putExtra(EXTRA_AUDIO_ONLY, request.audioOnly)
                 request.approxTotalBytes?.let { putExtra(EXTRA_TOTAL_BYTES, it) }
             }
             context.startForegroundService(intent)

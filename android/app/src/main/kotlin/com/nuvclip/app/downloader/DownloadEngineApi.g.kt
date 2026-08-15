@@ -198,7 +198,9 @@ class FlutterError (
 enum class SourcePlatform(val raw: Int) {
   TIKTOK(0),
   INSTAGRAM(1),
-  UNKNOWN(2);
+  FACEBOOK(2),
+  YOUTUBE(3),
+  UNKNOWN(4);
 
   companion object {
     fun ofRaw(raw: Int): SourcePlatform? {
@@ -298,7 +300,13 @@ data class VideoAnalysis (
   val author: String? = null,
   val thumbnailUrl: String? = null,
   val durationSeconds: Long,
-  val formats: List<VideoFormatOption>
+  val formats: List<VideoFormatOption>,
+  /**
+   * Calidades de solo-audio (extraccion con ffmpeg), separadas de [formats]
+   * porque no tienen altura y se seleccionan desde un modo aparte en la UI
+   * ("Video" / "Solo audio").
+   */
+  val audioFormats: List<VideoFormatOption>
 )
  {
   companion object {
@@ -310,7 +318,8 @@ data class VideoAnalysis (
       val thumbnailUrl = pigeonVar_list[4] as String?
       val durationSeconds = pigeonVar_list[5] as Long
       val formats = pigeonVar_list[6] as List<VideoFormatOption>
-      return VideoAnalysis(sourceUrl, platform, title, author, thumbnailUrl, durationSeconds, formats)
+      val audioFormats = pigeonVar_list[7] as List<VideoFormatOption>
+      return VideoAnalysis(sourceUrl, platform, title, author, thumbnailUrl, durationSeconds, formats, audioFormats)
     }
   }
   fun toList(): List<Any?> {
@@ -322,6 +331,7 @@ data class VideoAnalysis (
       thumbnailUrl,
       durationSeconds,
       formats,
+      audioFormats,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -332,7 +342,7 @@ data class VideoAnalysis (
       return true
     }
     val other = other as VideoAnalysis
-    return DownloadEngineApiPigeonUtils.deepEquals(this.sourceUrl, other.sourceUrl) && DownloadEngineApiPigeonUtils.deepEquals(this.platform, other.platform) && DownloadEngineApiPigeonUtils.deepEquals(this.title, other.title) && DownloadEngineApiPigeonUtils.deepEquals(this.author, other.author) && DownloadEngineApiPigeonUtils.deepEquals(this.thumbnailUrl, other.thumbnailUrl) && DownloadEngineApiPigeonUtils.deepEquals(this.durationSeconds, other.durationSeconds) && DownloadEngineApiPigeonUtils.deepEquals(this.formats, other.formats)
+    return DownloadEngineApiPigeonUtils.deepEquals(this.sourceUrl, other.sourceUrl) && DownloadEngineApiPigeonUtils.deepEquals(this.platform, other.platform) && DownloadEngineApiPigeonUtils.deepEquals(this.title, other.title) && DownloadEngineApiPigeonUtils.deepEquals(this.author, other.author) && DownloadEngineApiPigeonUtils.deepEquals(this.thumbnailUrl, other.thumbnailUrl) && DownloadEngineApiPigeonUtils.deepEquals(this.durationSeconds, other.durationSeconds) && DownloadEngineApiPigeonUtils.deepEquals(this.formats, other.formats) && DownloadEngineApiPigeonUtils.deepEquals(this.audioFormats, other.audioFormats)
   }
 
   override fun hashCode(): Int {
@@ -344,10 +354,11 @@ data class VideoAnalysis (
     result = 31 * result + DownloadEngineApiPigeonUtils.deepHash(this.thumbnailUrl)
     result = 31 * result + DownloadEngineApiPigeonUtils.deepHash(this.durationSeconds)
     result = 31 * result + DownloadEngineApiPigeonUtils.deepHash(this.formats)
+    result = 31 * result + DownloadEngineApiPigeonUtils.deepHash(this.audioFormats)
     return result
   }
   override fun toString(): String {
-    return "VideoAnalysis(sourceUrl=$sourceUrl, platform=$platform, title=$title, author=$author, thumbnailUrl=$thumbnailUrl, durationSeconds=$durationSeconds, formats=$formats)"
+    return "VideoAnalysis(sourceUrl=$sourceUrl, platform=$platform, title=$title, author=$author, thumbnailUrl=$thumbnailUrl, durationSeconds=$durationSeconds, formats=$formats, audioFormats=$audioFormats)"
   }
 }
 
@@ -422,6 +433,13 @@ data class DownloadRequest (
   val suggestedFileName: String,
   val wifiOnly: Boolean,
   /**
+   * true = extraer solo el audio (yt-dlp -x + ffmpeg) en vez del video
+   * completo; [formatId] en ese caso es uno de los ids sinteticos de
+   * [VideoAnalysis.audioFormats] ("audio-192", etc.), no un formato real de
+   * yt-dlp.
+   */
+  val audioOnly: Boolean,
+  /**
    * Tamaño aproximado que ya se conocia desde el analisis (seccion 4, Vista
    * previa). Se reenvia para que el progreso pueda mostrar MB descargados
    * sin que Kotlin tenga que volver a inferirlo.
@@ -437,8 +455,9 @@ data class DownloadRequest (
       val formatId = pigeonVar_list[3] as String
       val suggestedFileName = pigeonVar_list[4] as String
       val wifiOnly = pigeonVar_list[5] as Boolean
-      val approxTotalBytes = pigeonVar_list[6] as Long?
-      return DownloadRequest(downloadId, sourceUrl, platform, formatId, suggestedFileName, wifiOnly, approxTotalBytes)
+      val audioOnly = pigeonVar_list[6] as Boolean
+      val approxTotalBytes = pigeonVar_list[7] as Long?
+      return DownloadRequest(downloadId, sourceUrl, platform, formatId, suggestedFileName, wifiOnly, audioOnly, approxTotalBytes)
     }
   }
   fun toList(): List<Any?> {
@@ -449,6 +468,7 @@ data class DownloadRequest (
       formatId,
       suggestedFileName,
       wifiOnly,
+      audioOnly,
       approxTotalBytes,
     )
   }
@@ -460,7 +480,7 @@ data class DownloadRequest (
       return true
     }
     val other = other as DownloadRequest
-    return DownloadEngineApiPigeonUtils.deepEquals(this.downloadId, other.downloadId) && DownloadEngineApiPigeonUtils.deepEquals(this.sourceUrl, other.sourceUrl) && DownloadEngineApiPigeonUtils.deepEquals(this.platform, other.platform) && DownloadEngineApiPigeonUtils.deepEquals(this.formatId, other.formatId) && DownloadEngineApiPigeonUtils.deepEquals(this.suggestedFileName, other.suggestedFileName) && DownloadEngineApiPigeonUtils.deepEquals(this.wifiOnly, other.wifiOnly) && DownloadEngineApiPigeonUtils.deepEquals(this.approxTotalBytes, other.approxTotalBytes)
+    return DownloadEngineApiPigeonUtils.deepEquals(this.downloadId, other.downloadId) && DownloadEngineApiPigeonUtils.deepEquals(this.sourceUrl, other.sourceUrl) && DownloadEngineApiPigeonUtils.deepEquals(this.platform, other.platform) && DownloadEngineApiPigeonUtils.deepEquals(this.formatId, other.formatId) && DownloadEngineApiPigeonUtils.deepEquals(this.suggestedFileName, other.suggestedFileName) && DownloadEngineApiPigeonUtils.deepEquals(this.wifiOnly, other.wifiOnly) && DownloadEngineApiPigeonUtils.deepEquals(this.audioOnly, other.audioOnly) && DownloadEngineApiPigeonUtils.deepEquals(this.approxTotalBytes, other.approxTotalBytes)
   }
 
   override fun hashCode(): Int {
@@ -471,11 +491,12 @@ data class DownloadRequest (
     result = 31 * result + DownloadEngineApiPigeonUtils.deepHash(this.formatId)
     result = 31 * result + DownloadEngineApiPigeonUtils.deepHash(this.suggestedFileName)
     result = 31 * result + DownloadEngineApiPigeonUtils.deepHash(this.wifiOnly)
+    result = 31 * result + DownloadEngineApiPigeonUtils.deepHash(this.audioOnly)
     result = 31 * result + DownloadEngineApiPigeonUtils.deepHash(this.approxTotalBytes)
     return result
   }
   override fun toString(): String {
-    return "DownloadRequest(downloadId=$downloadId, sourceUrl=$sourceUrl, platform=$platform, formatId=$formatId, suggestedFileName=$suggestedFileName, wifiOnly=$wifiOnly, approxTotalBytes=$approxTotalBytes)"
+    return "DownloadRequest(downloadId=$downloadId, sourceUrl=$sourceUrl, platform=$platform, formatId=$formatId, suggestedFileName=$suggestedFileName, wifiOnly=$wifiOnly, audioOnly=$audioOnly, approxTotalBytes=$approxTotalBytes)"
   }
 }
 

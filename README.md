@@ -1,6 +1,6 @@
 # nuvclip
 
-Descarga videos publicos de TikTok e Instagram
+Descarga videos publicos de TikTok, Instagram, Facebook y YouTube, en video o extrayendo solo el audio (MP3)
 
 ## Getting Started
 

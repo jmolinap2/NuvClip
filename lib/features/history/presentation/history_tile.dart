@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:nuvclip/app/theme/tokens.dart';
 import 'package:nuvclip/core/db/database.dart';
-import 'package:nuvclip/core/platform/download_engine.g.dart';
 import 'package:nuvclip/core/utils/byte_format.dart';
 import 'package:nuvclip/core/utils/duration_format.dart';
 import 'package:nuvclip/shared/widgets/glass.dart';
@@ -57,7 +56,7 @@ class HistoryTile extends StatelessWidget {
                 const SizedBox(height: Tokens.space2),
                 Row(
                   children: [
-                    PlatformBadge(isTikTok: entry.platform == SourcePlatform.tiktok, size: 18),
+                    PlatformBadge(platform: entry.platform, size: 18),
                     const SizedBox(width: Tokens.space2),
                     Text(formatBytes(entry.sizeBytes), style: Theme.of(context).textTheme.bodySmall),
                   ],

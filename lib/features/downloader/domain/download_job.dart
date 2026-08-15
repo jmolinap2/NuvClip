@@ -7,6 +7,7 @@ class DownloadJobState {
     this.stage = DownloadStage.idle,
     this.url = '',
     this.analysis,
+    this.audioOnly = false,
     this.selectedFormat,
     this.downloadId,
     this.progressPercent = 0,
@@ -20,6 +21,11 @@ class DownloadJobState {
   final DownloadStage stage;
   final String url;
   final VideoAnalysis? analysis;
+
+  /// true = el usuario eligio el modo "Solo audio" en la vista previa;
+  /// [selectedFormat] sale entonces de `analysis.audioFormats` en vez de
+  /// `analysis.formats`.
+  final bool audioOnly;
   final VideoFormatOption? selectedFormat;
   final String? downloadId;
   final double progressPercent;
@@ -35,6 +41,7 @@ class DownloadJobState {
     DownloadStage? stage,
     String? url,
     VideoAnalysis? analysis,
+    bool? audioOnly,
     VideoFormatOption? selectedFormat,
     String? downloadId,
     double? progressPercent,
@@ -49,6 +56,7 @@ class DownloadJobState {
       stage: stage ?? this.stage,
       url: url ?? this.url,
       analysis: analysis ?? this.analysis,
+      audioOnly: audioOnly ?? this.audioOnly,
       selectedFormat: selectedFormat ?? this.selectedFormat,
       downloadId: downloadId ?? this.downloadId,
       progressPercent: progressPercent ?? this.progressPercent,

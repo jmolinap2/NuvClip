@@ -122,23 +122,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                 onPressed: _linkController.text.trim().isEmpty ? null : _analyze,
               ),
               const SizedBox(height: Tokens.space5),
-              Row(
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                runSpacing: Tokens.space2,
                 children: [
                   Text('Compatible con', style: Theme.of(context).textTheme.bodyMedium),
                   const SizedBox(width: Tokens.space3),
-                  const PlatformBadge(isTikTok: true, size: 20),
+                  const PlatformBadge(platform: SourcePlatform.tiktok, size: 20),
                   const SizedBox(width: Tokens.space1),
                   const Text('TikTok', style: TextStyle(color: Palette.textSecondary, fontSize: 13)),
                   const SizedBox(width: Tokens.space3),
-                  const PlatformBadge(isTikTok: false, size: 20),
+                  const PlatformBadge(platform: SourcePlatform.instagram, size: 20),
                   const SizedBox(width: Tokens.space1),
                   const Text('Instagram', style: TextStyle(color: Palette.textSecondary, fontSize: 13)),
+                  const SizedBox(width: Tokens.space3),
+                  const PlatformBadge(platform: SourcePlatform.facebook, size: 20),
+                  const SizedBox(width: Tokens.space1),
+                  const Text('Facebook', style: TextStyle(color: Palette.textSecondary, fontSize: 13)),
+                  const SizedBox(width: Tokens.space3),
+                  const PlatformBadge(platform: SourcePlatform.youtube, size: 20),
+                  const SizedBox(width: Tokens.space1),
+                  const Text('YouTube', style: TextStyle(color: Palette.textSecondary, fontSize: 13)),
                 ],
               ),
               if (platform == SourcePlatform.unknown && _linkController.text.trim().isNotEmpty) ...[
                 const SizedBox(height: Tokens.space2),
                 Text(
-                  'Ese enlace no parece ser de TikTok ni Instagram.',
+                  'Ese enlace no parece ser de TikTok, Instagram, Facebook ni YouTube.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Palette.danger),
                 ),
               ],
@@ -209,7 +219,7 @@ class _LinkField extends StatelessWidget {
       onChanged: onChanged,
       style: const TextStyle(fontFamily: Tokens.fontFamily, fontSize: 14, color: Palette.textPrimary),
       decoration: InputDecoration(
-        hintText: 'Pega un enlace de TikTok o Instagram',
+        hintText: 'Pega un enlace de TikTok, Instagram, Facebook o YouTube',
         prefixIcon: const Icon(Icons.link_rounded, color: Palette.textMuted),
         suffixIcon: Padding(
           padding: const EdgeInsets.all(Tokens.space1),

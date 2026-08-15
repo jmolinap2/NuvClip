@@ -78,19 +78,10 @@ class DownloadController extends Notifier<DownloadJobState> {
     await bridge.ensureInitialized();
     final result = await bridge.analyzeUrl(state.url.trim());
     if (result.video != null) {
-      final preferredHeight = ref.read(settingsControllerProvider).preferredQualityHeight;
-      final formats = result.video!.formats;
-      final defaultFormat = formats.isEmpty
-          ? null
-          : formats.reduce((a, b) {
-              final aDiff = ((a.height ?? 0) - preferredHeight).abs();
-              final bDiff = ((b.height ?? 0) - preferredHeight).abs();
-              return aDiff <= bDiff ? a : b;
-            });
       state = state.copyWith(
         stage: DownloadStage.analyzed,
         analysis: result.video,
-        selectedFormat: defaultFormat,
+        selectedFormat: _defaultFormatFor(result.video!, state.audioOnly),
       );
     } else {
       state = state.copyWith(
@@ -104,6 +95,31 @@ class DownloadController extends Notifier<DownloadJobState> {
   void selectFormat(VideoFormatOption format) {
     if (state.stage != DownloadStage.analyzed) return;
     state = state.copyWith(selectedFormat: format);
+  }
+
+  /// Alterna entre descargar el video o extraer solo el audio (seccion 4:
+  /// "Opciones de calidad disponibles" reaparece para el modo elegido, ya
+  /// que `formats` y `audioFormats` tienen calidades independientes).
+  void setAudioOnly(bool audioOnly) {
+    if (state.stage != DownloadStage.analyzed) return;
+    final analysis = state.analysis;
+    if (analysis == null || audioOnly == state.audioOnly) return;
+    state = state.copyWith(audioOnly: audioOnly, selectedFormat: _defaultFormatFor(analysis, audioOnly));
+  }
+
+  /// Para audio no hay un ajuste de calidad preferida como con el video, asi
+  /// que se ofrece el bitrate intermedio (indice 1 de 3) como punto medio
+  /// razonable entre tamaño y fidelidad.
+  VideoFormatOption? _defaultFormatFor(VideoAnalysis analysis, bool audioOnly) {
+    final formats = audioOnly ? analysis.audioFormats : analysis.formats;
+    if (formats.isEmpty) return null;
+    if (audioOnly) return formats.length > 1 ? formats[1] : formats.first;
+    final preferredHeight = ref.read(settingsControllerProvider).preferredQualityHeight;
+    return formats.reduce((a, b) {
+      final aDiff = ((a.height ?? 0) - preferredHeight).abs();
+      final bDiff = ((b.height ?? 0) - preferredHeight).abs();
+      return aDiff <= bDiff ? a : b;
+    });
   }
 
   Future<void> startDownload() async {
@@ -140,6 +156,7 @@ class DownloadController extends Notifier<DownloadJobState> {
             formatId: format.formatId,
             suggestedFileName: fileName,
             wifiOnly: wifiOnly,
+            audioOnly: state.audioOnly,
             approxTotalBytes: format.approxSizeBytes,
           ),
         );

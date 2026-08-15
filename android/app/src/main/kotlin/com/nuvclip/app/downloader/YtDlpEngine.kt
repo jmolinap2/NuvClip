@@ -22,6 +22,13 @@ object YtDlpEngine {
 
     private val qualityBuckets = intArrayOf(2160, 1440, 1080, 720, 480, 360, 240)
 
+    // Bitrates fijos ofrecidos para "Solo audio" (seccion 4, Vista previa:
+    // "Opciones de calidad disponibles"). No se derivan de los formatos que
+    // entrega el extractor porque TikTok/Instagram/Facebook normalmente no
+    // exponen streams de audio separados; la extraccion real ocurre con -x
+    // + ffmpeg en buildDownloadRequest, sea cual sea el origen.
+    private val audioQualityKbps = intArrayOf(192, 128, 64)
+
     @Synchronized
     fun initialize(context: Context) {
         if (initialized) return
@@ -103,11 +110,43 @@ object YtDlpEngine {
     private fun bestSize(exact: Long, approx: Long): Long? =
         exact.takeIf { it > 0 } ?: approx.takeIf { it > 0 }
 
-    fun buildDownloadRequest(sourceUrl: String, formatId: String, outputPath: String): YoutubeDLRequest {
+    /**
+     * A diferencia de [toFormatOptions], estas opciones no salen de
+     * `info.formats`: son tres bitrates fijos, siempre disponibles sin
+     * importar que exponga el extractor. El tamaño es una estimacion CBR a
+     * partir de la duracion (bitrate * duracion / 8), suficiente para el
+     * "Tamaño estimado" de la vista previa.
+     */
+    fun toAudioFormatOptions(info: VideoInfo): List<VideoFormatOption> {
+        val durationSeconds = info.duration.toLong()
+        return audioQualityKbps.map { kbps ->
+            VideoFormatOption(
+                formatId = "audio-$kbps",
+                qualityLabel = "$kbps kbps",
+                fileExtension = "mp3",
+                height = null,
+                approxSizeBytes = if (durationSeconds > 0) durationSeconds * kbps * 1000L / 8 else null,
+            )
+        }
+    }
+
+    fun buildDownloadRequest(sourceUrl: String, formatId: String, outputPath: String, audioOnly: Boolean): YoutubeDLRequest {
         val request = YoutubeDLRequest(sourceUrl)
         request.addOption("--no-playlist")
-        request.addOption("-f", formatId)
-        request.addOption("--merge-output-format", "mp4")
+        if (audioOnly) {
+            val kbps = formatId.removePrefix("audio-").toIntOrNull() ?: audioQualityKbps.last()
+            // "-f bestaudio/best" deja que yt-dlp elija la mejor fuente de
+            // audio disponible; -x + ffmpeg (ya inicializado en initialize())
+            // hace la extraccion real a mp3, sin importar si el origen traia
+            // audio y video mezclados (caso comun en TikTok/Instagram).
+            request.addOption("-f", "bestaudio/best")
+            request.addOption("-x")
+            request.addOption("--audio-format", "mp3")
+            request.addOption("--audio-quality", "${kbps}K")
+        } else {
+            request.addOption("-f", formatId)
+            request.addOption("--merge-output-format", "mp4")
+        }
         request.addOption("-o", outputPath)
         return request
     }

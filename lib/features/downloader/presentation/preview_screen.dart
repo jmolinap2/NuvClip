@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:nuvclip/app/theme/tokens.dart';
 import 'package:nuvclip/core/errors/error_messages.dart';
 import 'package:nuvclip/core/platform/download_engine.g.dart';
+import 'package:nuvclip/core/platform/url_helper.dart';
 import 'package:nuvclip/core/utils/byte_format.dart';
 import 'package:nuvclip/core/utils/duration_format.dart';
 import 'package:nuvclip/features/downloader/domain/download_job.dart';
@@ -75,8 +76,8 @@ class _VideoPreview extends StatelessWidget {
               top: Tokens.space3,
               left: Tokens.space3,
               child: PillChip(
-                label: analysis.platform == SourcePlatform.tiktok ? 'TikTok' : 'Instagram',
-                icon: analysis.platform == SourcePlatform.tiktok ? Icons.music_note_rounded : Icons.camera_alt_rounded,
+                label: platformLabel(analysis.platform),
+                icon: platformIcon(analysis.platform),
               ),
             ),
             if (analysis.author != null)
@@ -186,29 +187,53 @@ class _QualitySection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(downloadControllerProvider.notifier);
+    final formats = state.audioOnly ? analysis.audioFormats : analysis.formats;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: PillChip(
+                label: 'Video',
+                icon: Icons.videocam_rounded,
+                selected: !state.audioOnly,
+                onTap: () => controller.setAudioOnly(false),
+              ),
+            ),
+            const SizedBox(width: Tokens.space2),
+            Expanded(
+              child: PillChip(
+                label: 'Solo audio',
+                icon: Icons.music_note_rounded,
+                selected: state.audioOnly,
+                onTap: () => controller.setAudioOnly(true),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: Tokens.space5),
         Text('Calidad', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: Tokens.space3),
         Row(
           children: [
-            for (final format in analysis.formats) ...[
+            for (final format in formats) ...[
               Expanded(
                 child: _QualityOption(
+                  audioOnly: state.audioOnly,
                   format: format,
                   selected: state.selectedFormat?.formatId == format.formatId,
                   onTap: () => controller.selectFormat(format),
                 ),
               ),
-              if (format != analysis.formats.last) const SizedBox(width: Tokens.space2),
+              if (format != formats.last) const SizedBox(width: Tokens.space2),
             ],
           ],
         ),
         const SizedBox(height: Tokens.space6),
         GradientButton(
-          label: 'Descargar video',
-          icon: Icons.download_rounded,
+          label: state.audioOnly ? 'Descargar audio' : 'Descargar video',
+          icon: state.audioOnly ? Icons.audiotrack_rounded : Icons.download_rounded,
           onPressed: state.selectedFormat == null ? null : controller.startDownload,
         ),
         const SizedBox(height: Tokens.space3),
@@ -226,15 +251,23 @@ class _QualitySection extends ConsumerWidget {
 }
 
 class _QualityOption extends StatelessWidget {
-  const _QualityOption({required this.format, required this.selected, required this.onTap});
+  const _QualityOption({required this.audioOnly, required this.format, required this.selected, required this.onTap});
 
+  final bool audioOnly;
   final VideoFormatOption format;
   final bool selected;
   final VoidCallback onTap;
 
-  String get _tag => (format.height ?? 0) >= 720 ? 'HD' : 'SD';
+  int get _audioKbps => int.tryParse(format.formatId.replaceFirst('audio-', '')) ?? 0;
+
+  String get _tag => audioOnly ? 'MP3' : ((format.height ?? 0) >= 720 ? 'HD' : 'SD');
 
   String get _hint {
+    if (audioOnly) {
+      if (_audioKbps >= 192) return 'Mejor calidad';
+      if (_audioKbps >= 128) return 'Buena calidad';
+      return 'Tamano menor';
+    }
     final height = format.height ?? 0;
     if (height >= 1080) return 'Mejor calidad';
     if (height >= 720) return 'Buena calidad';

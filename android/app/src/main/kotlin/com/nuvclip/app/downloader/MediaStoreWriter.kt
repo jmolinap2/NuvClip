@@ -60,6 +60,11 @@ object MediaStoreWriter {
         "webm" -> "video/webm"
         "mov" -> "video/quicktime"
         "mkv" -> "video/x-matroska"
+        "mp3" -> "audio/mpeg"
+        "m4a" -> "audio/mp4"
+        "aac" -> "audio/aac"
+        "opus" -> "audio/opus"
+        "wav" -> "audio/wav"
         else -> "video/mp4"
     }
 }

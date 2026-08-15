@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:nuvclip/app/theme/tokens.dart';
+import 'package:nuvclip/core/platform/download_engine.g.dart';
 
 /// Tarjeta translucida con blur sutil, la unidad visual base de las tres
 /// pantallas (tarjetas de historial, bloque de vista previa, filas de
@@ -190,7 +191,7 @@ class SectionLabel extends StatelessWidget {
   }
 }
 
-/// Chip pequeño usado para "Compatible con TikTok / Instagram" y para el
+/// Chip pequeño usado para "Compatible con TikTok / Instagram / Facebook / YouTube" y para el
 /// filtro de plataforma en el historial.
 class PillChip extends StatelessWidget {
   const PillChip({
@@ -217,6 +218,7 @@ class PillChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(Tokens.radiusStadium),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: Tokens.space4, vertical: Tokens.space2),
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             gradient: selected ? Palette.brandGradient : null,
             color: selected ? null : Palette.surface,
@@ -247,14 +249,25 @@ class PillChip extends StatelessWidget {
   }
 }
 
-/// Insignia de plataforma reconocible sin usar los logotipos registrados de
-/// TikTok/Instagram: un glifo generico dentro de una insignia con los
-/// colores de marca de cada plataforma. Decision deliberada para no
-/// empaquetar assets de marcas de terceros.
-class PlatformBadge extends StatelessWidget {
-  const PlatformBadge({super.key, required this.isTikTok, this.size = 22});
+/// Glifo generico por plataforma, usado tanto por [PlatformBadge] como por
+/// los chips de vista previa/historial, para no repetir el mismo switch en
+/// cada pantalla.
+IconData platformIcon(SourcePlatform platform) => switch (platform) {
+      SourcePlatform.tiktok => Icons.music_note_rounded,
+      SourcePlatform.instagram => Icons.camera_alt_rounded,
+      SourcePlatform.facebook => Icons.thumb_up_rounded,
+      SourcePlatform.youtube => Icons.play_arrow_rounded,
+      SourcePlatform.unknown => Icons.link_rounded,
+    };
 
-  final bool isTikTok;
+/// Insignia de plataforma reconocible sin usar los logotipos registrados de
+/// TikTok/Instagram/Facebook/YouTube: un glifo generico dentro de una
+/// insignia con los colores de marca de cada plataforma. Decision
+/// deliberada para no empaquetar assets de marcas de terceros.
+class PlatformBadge extends StatelessWidget {
+  const PlatformBadge({super.key, required this.platform, this.size = 22});
+
+  final SourcePlatform platform;
   final double size;
 
   @override
@@ -263,16 +276,22 @@ class PlatformBadge extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: isTikTok ? Colors.black : null,
-        gradient: isTikTok
-            ? null
-            : const LinearGradient(
+        color: switch (platform) {
+          SourcePlatform.tiktok => Colors.black,
+          SourcePlatform.facebook => const Color(0xFF1877F2),
+          SourcePlatform.youtube => const Color(0xFFFF0000),
+          SourcePlatform.instagram => null,
+          SourcePlatform.unknown => Palette.surfaceBorder,
+        },
+        gradient: platform == SourcePlatform.instagram
+            ? const LinearGradient(
                 colors: [Color(0xFFFEDA75), Color(0xFFD62976), Color(0xFF4F5BD5)],
-              ),
+              )
+            : null,
         borderRadius: BorderRadius.circular(size * 0.3),
       ),
       child: Icon(
-        isTikTok ? Icons.music_note_rounded : Icons.camera_alt_rounded,
+        platformIcon(platform),
         size: size * 0.62,
         color: Colors.white,
       ),

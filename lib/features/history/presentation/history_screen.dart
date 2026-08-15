@@ -62,27 +62,42 @@ class HistoryScreen extends ConsumerWidget {
                     orElse: () => const SizedBox.shrink(),
                   ),
                   const SizedBox(height: Tokens.space4),
-                  Row(
-                    children: [
-                      PillChip(
-                        label: 'Todos',
-                        icon: Icons.apps_rounded,
-                        selected: filter == HistoryFilter.all,
-                        onTap: () => ref.read(_filterProvider.notifier).state = HistoryFilter.all,
-                      ),
-                      const SizedBox(width: Tokens.space2),
-                      PillChip(
-                        label: 'TikTok',
-                        selected: filter == HistoryFilter.tiktok,
-                        onTap: () => ref.read(_filterProvider.notifier).state = HistoryFilter.tiktok,
-                      ),
-                      const SizedBox(width: Tokens.space2),
-                      PillChip(
-                        label: 'Instagram',
-                        selected: filter == HistoryFilter.instagram,
-                        onTap: () => ref.read(_filterProvider.notifier).state = HistoryFilter.instagram,
-                      ),
-                    ],
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        PillChip(
+                          label: 'Todos',
+                          icon: Icons.apps_rounded,
+                          selected: filter == HistoryFilter.all,
+                          onTap: () => ref.read(_filterProvider.notifier).state = HistoryFilter.all,
+                        ),
+                        const SizedBox(width: Tokens.space2),
+                        PillChip(
+                          label: 'TikTok',
+                          selected: filter == HistoryFilter.tiktok,
+                          onTap: () => ref.read(_filterProvider.notifier).state = HistoryFilter.tiktok,
+                        ),
+                        const SizedBox(width: Tokens.space2),
+                        PillChip(
+                          label: 'Instagram',
+                          selected: filter == HistoryFilter.instagram,
+                          onTap: () => ref.read(_filterProvider.notifier).state = HistoryFilter.instagram,
+                        ),
+                        const SizedBox(width: Tokens.space2),
+                        PillChip(
+                          label: 'Facebook',
+                          selected: filter == HistoryFilter.facebook,
+                          onTap: () => ref.read(_filterProvider.notifier).state = HistoryFilter.facebook,
+                        ),
+                        const SizedBox(width: Tokens.space2),
+                        PillChip(
+                          label: 'YouTube',
+                          selected: filter == HistoryFilter.youtube,
+                          onTap: () => ref.read(_filterProvider.notifier).state = HistoryFilter.youtube,
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: Tokens.space3),
                   TextField(

@@ -9,8 +9,8 @@ class HistoryStats {
   final int totalBytes;
 }
 
-/// Filtro de plataforma del historial (chips "Todos / TikTok / Instagram").
-enum HistoryFilter { all, tiktok, instagram }
+/// Filtro de plataforma del historial (chips "Todos / TikTok / Instagram / Facebook / YouTube").
+enum HistoryFilter { all, tiktok, instagram, facebook, youtube }
 
 class HistoryRepository {
   const HistoryRepository(this._db);
@@ -78,6 +78,10 @@ class HistoryRepository {
       select.where((t) => t.platform.equalsValue(SourcePlatform.tiktok));
     } else if (filter == HistoryFilter.instagram) {
       select.where((t) => t.platform.equalsValue(SourcePlatform.instagram));
+    } else if (filter == HistoryFilter.facebook) {
+      select.where((t) => t.platform.equalsValue(SourcePlatform.facebook));
+    } else if (filter == HistoryFilter.youtube) {
+      select.where((t) => t.platform.equalsValue(SourcePlatform.youtube));
     }
     if (query.trim().isNotEmpty) {
       select.where((t) => t.fileName.like('%${query.trim()}%'));

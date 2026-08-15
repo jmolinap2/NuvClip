@@ -20,7 +20,7 @@ import 'package:pigeon/pigeon.dart';
     dartPackageName: 'nuvclip',
   ),
 )
-enum SourcePlatform { tiktok, instagram, unknown }
+enum SourcePlatform { tiktok, instagram, facebook, youtube, unknown }
 
 /// Clasificacion tecnica del fallo (requerimiento seccion 8). El mensaje
 /// exacto que ve el usuario vive en Dart (una tabla codigo -> texto en
@@ -60,6 +60,11 @@ class VideoAnalysis {
   String? thumbnailUrl;
   late int durationSeconds;
   late List<VideoFormatOption> formats;
+
+  /// Calidades de solo-audio (extraccion con ffmpeg), separadas de [formats]
+  /// porque no tienen altura y se seleccionan desde un modo aparte en la UI
+  /// ("Video" / "Solo audio").
+  late List<VideoFormatOption> audioFormats;
 }
 
 /// Union por nulabilidad: si [errorCode] es nulo, [video] esta presente y la
@@ -86,6 +91,12 @@ class DownloadRequest {
   late String formatId;
   late String suggestedFileName;
   late bool wifiOnly;
+
+  /// true = extraer solo el audio (yt-dlp -x + ffmpeg) en vez del video
+  /// completo; [formatId] en ese caso es uno de los ids sinteticos de
+  /// [VideoAnalysis.audioFormats] ("audio-192", etc.), no un formato real de
+  /// yt-dlp.
+  late bool audioOnly;
 
   /// Tamaño aproximado que ya se conocia desde el analisis (seccion 4, Vista
   /// previa). Se reenvia para que el progreso pueda mostrar MB descargados

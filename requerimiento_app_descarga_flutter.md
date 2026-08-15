@@ -2,7 +2,7 @@
 
 ## 1. Objetivo
 
-Crear una aplicación móvil para Android que permita descargar videos públicos de TikTok e Instagram directamente en el dispositivo.
+Crear una aplicación móvil para Android que permita descargar videos públicos de TikTok, Instagram, Facebook y YouTube directamente en el dispositivo.
 
 La aplicación será:
 
@@ -13,7 +13,7 @@ La aplicación será:
 - Sin consumo de APIs pagadas.
 - De uso simple: pegar enlace, analizar y descargar.
 
-> La descarga debe limitarse a contenido público que el usuario tenga permiso para guardar. No se garantiza compatibilidad permanente, porque TikTok e Instagram cambian sus mecanismos internos con frecuencia.
+> La descarga debe limitarse a contenido público que el usuario tenga permiso para guardar. No se garantiza compatibilidad permanente, porque TikTok, Instagram, Facebook y YouTube cambian sus mecanismos internos con frecuencia.
 
 ---
 
@@ -66,7 +66,7 @@ El archivo se descarga en el dispositivo
 Se registra en el historial local
 ```
 
-La aplicación también podrá recibir enlaces desde el menú **Compartir** de TikTok, Instagram o el navegador.
+La aplicación también podrá recibir enlaces desde el menú **Compartir** de TikTok, Instagram, Facebook, YouTube o el navegador.
 
 ---
 
@@ -76,7 +76,7 @@ La aplicación también podrá recibir enlaces desde el menú **Compartir** de T
 
 - Campo para pegar el enlace.
 - Botón para pegar desde el portapapeles.
-- Detección automática de TikTok o Instagram.
+- Detección automática de TikTok, Instagram, Facebook o YouTube.
 - Botón principal **Analizar enlace**.
 - Acceso rápido a descargas recientes.
 
@@ -87,9 +87,10 @@ La aplicación también podrá recibir enlaces desde el menú **Compartir** de T
 - Nombre del autor cuando esté disponible.
 - Descripción corta.
 - Duración.
-- Opciones de calidad disponibles.
+- Modo **Video** o **Solo audio** (extracción a MP3 con ffmpeg).
+- Opciones de calidad disponibles, según el modo elegido (resolución para video, bitrate para audio).
 - Tamaño aproximado cuando pueda determinarse.
-- Botón **Descargar video**.
+- Botón **Descargar video** o **Descargar audio**, segun el modo.
 
 ### Descarga
 
@@ -257,7 +258,7 @@ La pantalla debe mantener el foco en una sola acción:
 │ [ Analizar enlace ]
 │
 │ Compatible con
-│ TikTok · Instagram
+│ TikTok · Instagram · Facebook · YouTube
 │
 │ Descargas recientes
 │ [ tarjeta ] [ tarjeta ]
@@ -288,7 +289,7 @@ No se mostrarán errores técnicos directamente al usuario. Los detalles podrán
 
 ## 9. Seguridad y límites
 
-- Aceptar únicamente dominios permitidos de TikTok e Instagram.
+- Aceptar únicamente dominios permitidos de TikTok, Instagram, Facebook y YouTube.
 - No solicitar usuarios ni contraseñas.
 - No almacenar cookies personales.
 - No descargar contenido privado.
@@ -334,7 +335,7 @@ No se mostrarán errores técnicos directamente al usuario. Los detalles podrán
 
 - El procesamiento ocurre en el teléfono; no existen costos por solicitud.
 - La aplicación puede funcionar sin anuncios ni pagos.
-- TikTok e Instagram pueden cambiar y provocar fallos temporales.
+- TikTok, Instagram, Facebook y YouTube pueden cambiar y provocar fallos temporales.
 - El extractor debe mantenerse actualizado.
 - Algunos videos pueden requerir autenticación, estar bloqueados o no ser accesibles.
 - Una marca añadida dentro del video por el propio creador no puede eliminarse automáticamente.

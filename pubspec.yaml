@@ -1,8 +1,8 @@
 name: nuvclip
-description: "NuvClip — descarga videos publicos de TikTok e Instagram, sin anuncios ni suscripciones."
+description: "NuvClip — descarga videos publicos de TikTok, Instagram, Facebook y YouTube, sin anuncios ni suscripciones."
 publish_to: 'none'
 
-version: 1.0.0+5
+version: 1.0.1+6
 
 environment:
   sdk: ^3.12.2

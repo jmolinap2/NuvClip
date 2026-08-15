@@ -4,7 +4,7 @@ import 'package:nuvclip/core/platform/download_engine.g.dart';
 /// mostraran errores tecnicos directamente al usuario"). Kotlin solo
 /// clasifica la falla; el copy final vive aqui, en un unico lugar.
 String userMessageFor(DownloadErrorCode code) => switch (code) {
-      DownloadErrorCode.unsupportedLink => 'Ese enlace no es compatible. NuvClip solo descarga desde TikTok e Instagram.',
+      DownloadErrorCode.unsupportedLink => 'Ese enlace no es compatible. NuvClip solo descarga desde TikTok, Instagram, Facebook y YouTube.',
       DownloadErrorCode.privateContent => 'Este contenido es privado y no se puede descargar.',
       DownloadErrorCode.contentRemoved => 'La publicacion ya no esta disponible; puede haber sido eliminada.',
       DownloadErrorCode.regionRestricted => 'Este contenido esta restringido en tu region.',
