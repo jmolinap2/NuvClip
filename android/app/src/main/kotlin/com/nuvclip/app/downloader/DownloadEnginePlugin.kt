@@ -60,29 +60,82 @@ class DownloadEnginePlugin :
                 callback(Result.success(AnalysisResult(errorCode = DownloadErrorCode.UNSUPPORTED_LINK)))
                 return@launch
             }
-            val result = try {
-                val info = YtDlpEngine.analyze(url)
-                val analysis = VideoAnalysis(
-                    sourceUrl = url,
-                    platform = platform,
-                    title = info.title?.takeIf { it.isNotBlank() } ?: info.fulltitle ?: "Video sin titulo",
-                    author = info.uploader,
-                    thumbnailUrl = info.thumbnail,
-                    durationSeconds = info.duration.toLong(),
-                    formats = YtDlpEngine.toFormatOptions(info),
-                    audioFormats = YtDlpEngine.toAudioFormatOptions(info),
+            callback(
+                Result.success(
+                    runAnalysis(
+                        url = url,
+                        platform = platform,
+                        allowRetry = true,
+                        observedVersion = YtDlpEngine.currentVersion(requireContext()),
+                    )
                 )
-                AnalysisResult(video = analysis)
-            } catch (error: Exception) {
-                // Seccion 8 del requerimiento: el detalle tecnico no se le
-                // muestra al usuario, pero debe quedar en algun registro
-                // para poder diagnosticar. logcat es ese registro.
-                Log.w(TAG, "analyzeUrl fallo para $url", error)
-                AnalysisResult(errorCode = YtDlpEngine.classifyError(error), errorDetail = error.message)
-            }
-            callback(Result.success(result))
+            )
         }
     }
+
+    /**
+     * [YtDlpEngine.classifyError] ya distingue EXTRACTOR_OUTDATED (yt-dlp no
+     * pudo parsear la pagina) del resto de codigos (privado, eliminado,
+     * region, red). Ese es el unico que se arregla solo -- el sitio cambio
+     * su HTML/API y el binario empaquetado se quedo atras -- asi que ante
+     * ese codigo especifico se actualiza el extractor y se reintenta una
+     * vez antes de mostrarle un error al usuario. Los demas codigos no
+     * cambian con un update (por ejemplo, TikTok puede seguir roto incluso
+     * en el yt-dlp mas reciente si el problema es del lado de la
+     * plataforma), asi que no vale la pena reintentar.
+     */
+    private fun runAnalysis(
+        url: String,
+        platform: SourcePlatform,
+        allowRetry: Boolean,
+        observedVersion: String?,
+    ): AnalysisResult =
+        try {
+            val info = YtDlpEngine.analyze(url)
+            val analysis = VideoAnalysis(
+                sourceUrl = url,
+                platform = platform,
+                title = info.title?.takeIf { it.isNotBlank() } ?: info.fulltitle ?: "Video sin titulo",
+                author = info.uploader,
+                thumbnailUrl = info.thumbnail,
+                durationSeconds = info.duration.toLong(),
+                formats = YtDlpEngine.toFormatOptions(info),
+                audioFormats = YtDlpEngine.toAudioFormatOptions(info),
+            )
+            AnalysisResult(video = analysis)
+        } catch (error: Exception) {
+            val errorCode = YtDlpEngine.classifyError(error)
+            if (
+                allowRetry &&
+                YtDlpEngine.recoveryAction(error) == YtDlpEngine.RecoveryAction.UPDATE_EXTRACTOR
+            ) {
+                val readyToRetry = runCatching {
+                    YtDlpEngine.refreshExtractorForRecovery(
+                        context = requireContext(),
+                        observedVersion = observedVersion,
+                        onUpdateStarted = {
+                            mainHandler.post { flutterApi?.onExtractorAutoUpdating {} }
+                        },
+                    )
+                }.getOrElse {
+                    Log.w(TAG, "no se pudo recuperar el extractor durante el analisis", it)
+                    false
+                }
+                if (readyToRetry) {
+                    return runAnalysis(
+                        url = url,
+                        platform = platform,
+                        allowRetry = false,
+                        observedVersion = observedVersion,
+                    )
+                }
+            }
+            // Seccion 8 del requerimiento: el detalle tecnico no se le
+            // muestra al usuario, pero debe quedar en algun registro
+            // para poder diagnosticar. logcat es ese registro.
+            Log.w(TAG, "analyzeUrl fallo", error)
+            AnalysisResult(errorCode = errorCode, errorDetail = error.message)
+        }
 
     override fun startDownload(request: DownloadRequest) {
         DownloadForegroundService.enqueue(requireContext(), request)

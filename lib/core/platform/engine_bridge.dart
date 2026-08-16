@@ -59,10 +59,16 @@ class EngineBridge extends DownloadEngineFlutterApi {
   final _progress = StreamController<DownloadProgressEvent>.broadcast();
   final _completed = StreamController<DownloadCompletedEvent>.broadcast();
   final _failed = StreamController<DownloadFailedEvent>.broadcast();
+  final _extractorUpdating = StreamController<void>.broadcast();
 
   Stream<DownloadProgressEvent> get onProgress => _progress.stream;
   Stream<DownloadCompletedEvent> get onCompleted => _completed.stream;
   Stream<DownloadFailedEvent> get onFailed => _failed.stream;
+
+  /// Push transitorio de `analyzeUrl`: detecto un extractor desactualizado,
+  /// va a actualizarlo y reintentar el analisis original automaticamente
+  /// (ver [DownloadEnginePlugin.runAnalysis] del lado Kotlin).
+  Stream<void> get onExtractorUpdating => _extractorUpdating.stream;
 
   Future<void> initialize() => _host.initialize();
 
@@ -87,6 +93,11 @@ class EngineBridge extends DownloadEngineFlutterApi {
   Future<ExtractorUpdateResult> updateExtractor() => _host.updateExtractor();
 
   Future<String?> currentExtractorVersion() => _host.currentExtractorVersion();
+
+  @override
+  void onExtractorAutoUpdating() {
+    _extractorUpdating.add(null);
+  }
 
   @override
   void onDownloadProgress(

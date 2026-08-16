@@ -116,7 +116,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               _LinkField(controller: _linkController, onPaste: _pasteFromClipboard, onChanged: (_) => setState(() {})),
               const SizedBox(height: Tokens.space4),
               GradientButton(
-                label: 'Analizar enlace',
+                label: jobState.updatingExtractor ? 'Actualizando extractor...' : 'Analizar enlace',
                 icon: Icons.auto_awesome_rounded,
                 loading: jobState.stage == DownloadStage.analyzing,
                 onPressed: _linkController.text.trim().isEmpty ? null : _analyze,

@@ -33,6 +33,8 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class DownloadForegroundService : Service() {
 
+    private class CancelledBeforeExecution : Exception()
+
     private val job = Job()
     private val scope = CoroutineScope(Dispatchers.IO + job)
     private lateinit var queue: Channel<QueuedDownload>
@@ -46,6 +48,7 @@ class DownloadForegroundService : Service() {
         val wifiOnly: Boolean,
         val approxTotalBytes: Long?,
         val audioOnly: Boolean,
+        val requestedHeight: Long?,
     )
 
     override fun onCreate() {
@@ -83,6 +86,7 @@ class DownloadForegroundService : Service() {
                 wifiOnly = extras.getBoolean(EXTRA_WIFI_ONLY, false),
                 approxTotalBytes = extras.getLong(EXTRA_TOTAL_BYTES, -1L).takeIf { it > 0 },
                 audioOnly = extras.getBoolean(EXTRA_AUDIO_ONLY, false),
+                requestedHeight = extras.getLong(EXTRA_REQUESTED_HEIGHT, -1L).takeIf { it > 0 },
             )
         )
         return START_NOT_STICKY
@@ -108,22 +112,73 @@ class DownloadForegroundService : Service() {
         val outputTemplate = File(outputDir, "${item.downloadId}.%(ext)s").absolutePath
         updateNotification(item.suggestedFileName, 0, indeterminate = true, audioOnly = item.audioOnly)
 
-        var lastEmitAt = 0L
         try {
-            val request = YtDlpEngine.buildDownloadRequest(item.sourceUrl, item.formatId, outputTemplate, item.audioOnly)
-            YoutubeDL.getInstance().execute(request, item.downloadId) { percent, etaSeconds, _ ->
-                val now = System.currentTimeMillis()
-                // yt-dlp reporta progreso muchas veces por segundo en redes
-                // rapidas; sin este filtro el canal de Pigeon se satura sin
-                // que el usuario perciba diferencia visual.
-                if (now - lastEmitAt < PROGRESS_THROTTLE_MS && percent < 100f) return@execute
-                lastEmitAt = now
-                val downloaded = item.approxTotalBytes?.let { (it * (percent / 100.0)).toLong() } ?: 0L
-                DownloadEventBus.emitProgress(
-                    item.downloadId, percent.toDouble(), etaSeconds.takeIf { it > 0 },
-                    downloaded, item.approxTotalBytes,
-                )
-                updateNotification(item.suggestedFileName, percent.toInt(), indeterminate = false, audioOnly = item.audioOnly)
+            val observedVersion = YtDlpEngine.currentVersion(applicationContext)
+            var effectiveFormatId = item.formatId
+            var recoveryUsed = false
+            while (true) {
+                try {
+                    executeDownload(item, effectiveFormatId, outputTemplate)
+                    break
+                } catch (cancelled: YoutubeDL.CanceledException) {
+                    throw cancelled
+                } catch (cancelled: CancelledBeforeExecution) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    clearTemporaryFiles(outputDir, item.downloadId)
+                    val action = YtDlpEngine.recoveryAction(error)
+                    if (recoveryUsed || action == YtDlpEngine.RecoveryAction.NONE) throw error
+                    recoveryUsed = true
+
+                    val mayReanalyze = when (action) {
+                        YtDlpEngine.RecoveryAction.UPDATE_EXTRACTOR ->
+                            runCatching {
+                                YtDlpEngine.refreshExtractorForRecovery(
+                                    context = applicationContext,
+                                    observedVersion = observedVersion,
+                                    onUpdateStarted = {
+                                        Log.i(TAG, "actualizando yt-dlp para recuperar ${item.downloadId}")
+                                        updateNotification(
+                                            "Actualizando motor de descarga",
+                                            0,
+                                            indeterminate = true,
+                                            audioOnly = item.audioOnly,
+                                        )
+                                    },
+                                )
+                            }.getOrElse {
+                                Log.w(TAG, "no se pudo recuperar el extractor", it)
+                                false
+                            }
+                        YtDlpEngine.RecoveryAction.REANALYZE -> true
+                        YtDlpEngine.RecoveryAction.NONE -> false
+                    }
+                    if (!mayReanalyze) throw error
+                    if (cancelledIds.remove(item.downloadId)) {
+                        DownloadEventBus.emitFailed(item.downloadId, DownloadErrorCode.CANCELLED, null)
+                        return
+                    }
+
+                    effectiveFormatId = YtDlpEngine.refreshedFormatId(
+                        sourceUrl = item.sourceUrl,
+                        originalFormatId = effectiveFormatId,
+                        audioOnly = item.audioOnly,
+                        requestedHeight = item.requestedHeight,
+                    )
+                    updateNotification(
+                        item.suggestedFileName,
+                        0,
+                        indeterminate = true,
+                        audioOnly = item.audioOnly,
+                    )
+                    DownloadEventBus.emitProgress(
+                        item.downloadId,
+                        0.0,
+                        null,
+                        0L,
+                        item.approxTotalBytes,
+                    )
+                }
             }
 
             val producedFile = outputDir.listFiles { file -> file.name.startsWith("${item.downloadId}.") }?.firstOrNull()
@@ -135,14 +190,60 @@ class DownloadForegroundService : Service() {
 
             DownloadEventBus.emitCompleted(item.downloadId, savedUri.toString(), item.suggestedFileName, sizeBytes)
         } catch (cancelled: YoutubeDL.CanceledException) {
+            cancelledIds.remove(item.downloadId)
+            DownloadEventBus.emitFailed(item.downloadId, DownloadErrorCode.CANCELLED, null)
+        } catch (cancelled: CancelledBeforeExecution) {
             DownloadEventBus.emitFailed(item.downloadId, DownloadErrorCode.CANCELLED, null)
         } catch (error: Exception) {
-            Log.w(TAG, "descarga fallida para ${item.downloadId} (${item.sourceUrl})", error)
+            Log.w(TAG, "descarga fallida para ${item.downloadId}", error)
             DownloadEventBus.emitFailed(item.downloadId, YtDlpEngine.classifyError(error), error.message)
         } finally {
             outputDir.listFiles { file -> file.name.startsWith("${item.downloadId}.") }
                 ?.forEach { it.delete() }
         }
+    }
+
+    private fun executeDownload(
+        item: QueuedDownload,
+        formatId: String,
+        outputTemplate: String,
+    ) {
+        if (cancelledIds.remove(item.downloadId)) {
+            throw CancelledBeforeExecution()
+        }
+        var lastEmitAt = 0L
+        val request = YtDlpEngine.buildDownloadRequest(
+            item.sourceUrl,
+            formatId,
+            outputTemplate,
+            item.audioOnly,
+        )
+        YoutubeDL.getInstance().execute(request, item.downloadId) { percent, etaSeconds, _ ->
+            val now = System.currentTimeMillis()
+            if (now - lastEmitAt < PROGRESS_THROTTLE_MS && percent < 100f) return@execute
+            lastEmitAt = now
+            val downloaded = item.approxTotalBytes
+                ?.let { (it * (percent / 100.0)).toLong() }
+                ?: 0L
+            DownloadEventBus.emitProgress(
+                item.downloadId,
+                percent.toDouble(),
+                etaSeconds.takeIf { it > 0 },
+                downloaded,
+                item.approxTotalBytes,
+            )
+            updateNotification(
+                item.suggestedFileName,
+                percent.toInt(),
+                indeterminate = false,
+                audioOnly = item.audioOnly,
+            )
+        }
+    }
+
+    private fun clearTemporaryFiles(outputDir: File, downloadId: String) {
+        outputDir.listFiles { file -> file.name.startsWith("$downloadId.") }
+            ?.forEach { it.delete() }
     }
 
     private fun isOnWifi(): Boolean {
@@ -204,6 +305,7 @@ class DownloadForegroundService : Service() {
         const val EXTRA_WIFI_ONLY = "wifiOnly"
         const val EXTRA_TOTAL_BYTES = "totalBytes"
         const val EXTRA_AUDIO_ONLY = "audioOnly"
+        const val EXTRA_REQUESTED_HEIGHT = "requestedHeight"
 
         private val cancelledIds = Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
 
@@ -215,6 +317,7 @@ class DownloadForegroundService : Service() {
                 putExtra(EXTRA_FILE_NAME, request.suggestedFileName)
                 putExtra(EXTRA_WIFI_ONLY, request.wifiOnly)
                 putExtra(EXTRA_AUDIO_ONLY, request.audioOnly)
+                request.requestedHeight?.let { putExtra(EXTRA_REQUESTED_HEIGHT, it) }
                 request.approxTotalBytes?.let { putExtra(EXTRA_TOTAL_BYTES, it) }
             }
             context.startForegroundService(intent)

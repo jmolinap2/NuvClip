@@ -74,4 +74,6 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("androidx.core:core-ktx:1.17.0")
+
+    testImplementation("junit:junit:4.13.2")
 }

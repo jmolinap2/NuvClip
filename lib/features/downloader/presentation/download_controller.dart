@@ -8,7 +8,10 @@ import 'package:nuvclip/core/utils/filename_sanitizer.dart';
 import 'package:nuvclip/features/downloader/domain/download_job.dart';
 import 'package:nuvclip/features/settings/presentation/settings_controller.dart';
 
-final downloadControllerProvider = NotifierProvider<DownloadController, DownloadJobState>(DownloadController.new);
+final downloadControllerProvider =
+    NotifierProvider<DownloadController, DownloadJobState>(
+      DownloadController.new,
+    );
 
 /// Motor de estado de la pantalla Descargar + Vista previa (fases 1 y 2).
 /// Vive mas alla de la pantalla (NotifierProvider normal, no autoDispose)
@@ -18,6 +21,7 @@ class DownloadController extends Notifier<DownloadJobState> {
   StreamSubscription<DownloadProgressEvent>? _progressSub;
   StreamSubscription<DownloadCompletedEvent>? _completedSub;
   StreamSubscription<DownloadFailedEvent>? _failedSub;
+  StreamSubscription<void>? _extractorUpdatingSub;
 
   @override
   DownloadJobState build() {
@@ -25,6 +29,13 @@ class DownloadController extends Notifier<DownloadJobState> {
     _progressSub?.cancel();
     _completedSub?.cancel();
     _failedSub?.cancel();
+    _extractorUpdatingSub?.cancel();
+
+    _extractorUpdatingSub = bridge.onExtractorUpdating.listen((_) {
+      if (state.stage == DownloadStage.analyzing) {
+        state = state.copyWith(updatingExtractor: true);
+      }
+    });
 
     _progressSub = bridge.onProgress.listen((event) {
       if (event.downloadId != state.downloadId) return;
@@ -38,18 +49,26 @@ class DownloadController extends Notifier<DownloadJobState> {
 
     _completedSub = bridge.onCompleted.listen((event) async {
       if (event.downloadId != state.downloadId) return;
-      await ref.read(historyRepositoryProvider).recordCompleted(
+      await ref
+          .read(historyRepositoryProvider)
+          .recordCompleted(
             downloadId: event.downloadId,
             savedUri: event.savedUri,
             fileName: event.fileName,
             sizeBytes: event.sizeBytes,
           );
-      state = state.copyWith(stage: DownloadStage.completed, completed: event, progressPercent: 100);
+      state = state.copyWith(
+        stage: DownloadStage.completed,
+        completed: event,
+        progressPercent: 100,
+      );
     });
 
     _failedSub = bridge.onFailed.listen((event) async {
       if (event.downloadId != state.downloadId) return;
-      await ref.read(historyRepositoryProvider).discardStarted(event.downloadId);
+      await ref
+          .read(historyRepositoryProvider)
+          .discardStarted(event.downloadId);
       state = state.copyWith(
         stage: DownloadStage.failed,
         errorCode: event.errorCode,
@@ -61,6 +80,7 @@ class DownloadController extends Notifier<DownloadJobState> {
       _progressSub?.cancel();
       _completedSub?.cancel();
       _failedSub?.cancel();
+      _extractorUpdatingSub?.cancel();
     });
 
     return const DownloadJobState();
@@ -73,7 +93,10 @@ class DownloadController extends Notifier<DownloadJobState> {
 
   Future<void> analyze() async {
     if (state.url.trim().isEmpty || state.isBusy) return;
-    state = state.copyWith(stage: DownloadStage.analyzing);
+    state = state.copyWith(
+      stage: DownloadStage.analyzing,
+      updatingExtractor: false,
+    );
     final bridge = ref.read(engineBridgeProvider);
     await bridge.ensureInitialized();
     final result = await bridge.analyzeUrl(state.url.trim());
@@ -82,12 +105,14 @@ class DownloadController extends Notifier<DownloadJobState> {
         stage: DownloadStage.analyzed,
         analysis: result.video,
         selectedFormat: _defaultFormatFor(result.video!, state.audioOnly),
+        updatingExtractor: false,
       );
     } else {
       state = state.copyWith(
         stage: DownloadStage.failed,
         errorCode: result.errorCode,
         errorDetail: result.errorDetail,
+        updatingExtractor: false,
       );
     }
   }
@@ -104,7 +129,10 @@ class DownloadController extends Notifier<DownloadJobState> {
     if (state.stage != DownloadStage.analyzed) return;
     final analysis = state.analysis;
     if (analysis == null || audioOnly == state.audioOnly) return;
-    state = state.copyWith(audioOnly: audioOnly, selectedFormat: _defaultFormatFor(analysis, audioOnly));
+    state = state.copyWith(
+      audioOnly: audioOnly,
+      selectedFormat: _defaultFormatFor(analysis, audioOnly),
+    );
   }
 
   /// Para audio no hay un ajuste de calidad preferida como con el video, asi
@@ -114,7 +142,9 @@ class DownloadController extends Notifier<DownloadJobState> {
     final formats = audioOnly ? analysis.audioFormats : analysis.formats;
     if (formats.isEmpty) return null;
     if (audioOnly) return formats.length > 1 ? formats[1] : formats.first;
-    final preferredHeight = ref.read(settingsControllerProvider).preferredQualityHeight;
+    final preferredHeight = ref
+        .read(settingsControllerProvider)
+        .preferredQualityHeight;
     return formats.reduce((a, b) {
       final aDiff = ((a.height ?? 0) - preferredHeight).abs();
       final bDiff = ((b.height ?? 0) - preferredHeight).abs();
@@ -128,10 +158,15 @@ class DownloadController extends Notifier<DownloadJobState> {
     if (analysis == null || format == null) return;
 
     final downloadId = _newDownloadId();
-    final fileName = sanitizeFileName(analysis.title, extension: format.fileExtension);
+    final fileName = sanitizeFileName(
+      analysis.title,
+      extension: format.fileExtension,
+    );
     final wifiOnly = ref.read(settingsControllerProvider).wifiOnly;
 
-    await ref.read(historyRepositoryProvider).recordStarted(
+    await ref
+        .read(historyRepositoryProvider)
+        .recordStarted(
           downloadId: downloadId,
           sourceUrl: analysis.sourceUrl,
           platform: analysis.platform,
@@ -148,7 +183,9 @@ class DownloadController extends Notifier<DownloadJobState> {
       downloadedBytes: 0,
     );
 
-    await ref.read(engineBridgeProvider).startDownload(
+    await ref
+        .read(engineBridgeProvider)
+        .startDownload(
           DownloadRequest(
             downloadId: downloadId,
             sourceUrl: analysis.sourceUrl,
@@ -157,6 +194,7 @@ class DownloadController extends Notifier<DownloadJobState> {
             suggestedFileName: fileName,
             wifiOnly: wifiOnly,
             audioOnly: state.audioOnly,
+            requestedHeight: state.audioOnly ? null : format.height,
             approxTotalBytes: format.approxSizeBytes,
           ),
         );

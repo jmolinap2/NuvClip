@@ -1,6 +1,7 @@
 package com.nuvclip.app.downloader
 
 import android.content.Context
+import android.util.Log
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
@@ -17,6 +18,12 @@ import java.net.UnknownHostException
  * notificacion en primer plano respectivamente.
  */
 object YtDlpEngine {
+    enum class RecoveryAction {
+        NONE,
+        REANALYZE,
+        UPDATE_EXTRACTOR,
+    }
+
     @Volatile
     private var initialized = false
 
@@ -151,12 +158,75 @@ object YtDlpEngine {
         return request
     }
 
+    /**
+     * Reanaliza el enlace tras una recuperación y devuelve un formato vigente.
+     * En video conserva la altura solicitada cuando el id original desaparece;
+     * en audio conserva el bitrate sintético, que no depende del extractor.
+     */
+    fun refreshedFormatId(
+        sourceUrl: String,
+        originalFormatId: String,
+        audioOnly: Boolean,
+        requestedHeight: Long?,
+    ): String {
+        if (audioOnly) {
+            analyze(sourceUrl)
+            return originalFormatId
+        }
+        val formats = toFormatOptions(analyze(sourceUrl))
+        check(formats.isNotEmpty()) { "el reanalisis no devolvio formatos de video" }
+        return formats.firstOrNull { it.formatId == originalFormatId }?.formatId
+            ?: requestedHeight?.let { height ->
+                formats.filter { it.height != null }
+                    .minByOrNull { kotlin.math.abs(checkNotNull(it.height) - height) }
+                    ?.formatId
+            }
+            ?: formats.first().formatId
+    }
+
     @Synchronized
     fun updateExtractor(context: Context): Pair<Boolean, String?> {
         assertInitialized()
         val status = YoutubeDL.getInstance().updateYoutubeDL(context.applicationContext)
         val updated = status == YoutubeDL.UpdateStatus.DONE
         return updated to currentVersion(context)
+    }
+
+    /**
+     * Actualización reactiva single-flight. El botón manual de Ajustes sigue
+     * usando [updateExtractor] sin enfriamiento; esta ruta sí evita consultar
+     * GitHub una y otra vez ante un fallo que la última versión no resuelve.
+     */
+    @Synchronized
+    fun refreshExtractorForRecovery(
+        context: Context,
+        observedVersion: String?,
+        onUpdateStarted: () -> Unit = {},
+    ): Boolean {
+        assertInitialized()
+        val appContext = context.applicationContext
+        val current = currentVersion(appContext)
+        if (observedVersion != null && current != null && current != observedVersion) {
+            return true
+        }
+
+        val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val lastAttempt = preferences.getLong(KEY_LAST_RECOVERY_UPDATE_ATTEMPT, 0L)
+        if (now - lastAttempt < RECOVERY_UPDATE_COOLDOWN_MS) return false
+
+        preferences.edit().putLong(KEY_LAST_RECOVERY_UPDATE_ATTEMPT, now).apply()
+        onUpdateStarted()
+        val before = currentVersion(appContext)
+        val (reportedUpdated, after) = updateExtractor(appContext)
+        val versionChanged = before == null || after == null || before != after
+        val usable = reportedUpdated && versionChanged
+        Log.i(
+            TAG,
+            "actualizacion reactiva de yt-dlp: " +
+                "reportedUpdated=$reportedUpdated, versionChanged=$versionChanged",
+        )
+        return usable
     }
 
     /**
@@ -167,11 +237,9 @@ object YtDlpEngine {
      * clasificacion garantizada.
      */
     fun classifyError(throwable: Throwable): DownloadErrorCode {
-        if (throwable is UnknownHostException || throwable is IOException) {
-            return DownloadErrorCode.NETWORK_LOST
-        }
-        val text = (throwable.message ?: "").lowercase()
+        val text = diagnosticText(throwable)
         return when {
+            text.contains("no space left") -> DownloadErrorCode.INSUFFICIENT_STORAGE
             text.contains("unsupported url") -> DownloadErrorCode.UNSUPPORTED_LINK
             text.contains("private") -> DownloadErrorCode.PRIVATE_CONTENT
             text.contains("login") && text.contains("required") -> DownloadErrorCode.PRIVATE_CONTENT
@@ -181,12 +249,63 @@ object YtDlpEngine {
                 text.contains("has been removed") -> DownloadErrorCode.CONTENT_REMOVED
             text.contains("not available in your country") || text.contains("geo-restricted") ||
                 text.contains("blocked it in your country") -> DownloadErrorCode.REGION_RESTRICTED
-            text.contains("unable to extract") || text.contains("unable to parse") ||
-                text.contains("failed to parse json") -> DownloadErrorCode.EXTRACTOR_OUTDATED
+            text.contains("not a bot") || text.contains("too many requests") ||
+                text.contains("http error 429") -> DownloadErrorCode.FETCH_FAILED
             text.contains("unable to download webpage") || text.contains("http error 404") ||
-                text.contains("http error 403") -> DownloadErrorCode.FETCH_FAILED
-            text.contains("no space left") -> DownloadErrorCode.INSUFFICIENT_STORAGE
+                text.contains("http error 403") ||
+                text.contains("requested format is not available") ||
+                text.contains("only images are available") ||
+                text.contains("challenge solving failed") -> DownloadErrorCode.FETCH_FAILED
+            text.contains("no supported javascript runtime") -> DownloadErrorCode.UNKNOWN
+            throwable.causes().any { it is UnknownHostException || it is IOException } ||
+                NETWORK_ERROR_MARKERS.any(text::contains) -> DownloadErrorCode.NETWORK_LOST
+            text.contains("unable to extract") || text.contains("unable to parse") ||
+                text.contains("failed to parse json") ||
+                text.contains("signature extraction failed") ||
+                text.contains("nsig extraction failed") -> DownloadErrorCode.EXTRACTOR_OUTDATED
             else -> DownloadErrorCode.UNKNOWN
         }
     }
+
+    fun recoveryAction(throwable: Throwable): RecoveryAction {
+        val text = diagnosticText(throwable)
+        val errorCode = classifyError(throwable)
+        if (
+            errorCode == DownloadErrorCode.FETCH_FAILED &&
+            text.contains("requested format is not available")
+        ) {
+            return RecoveryAction.REANALYZE
+        }
+        return if (errorCode == DownloadErrorCode.EXTRACTOR_OUTDATED) {
+            RecoveryAction.UPDATE_EXTRACTOR
+        } else {
+            RecoveryAction.NONE
+        }
+    }
+
+    private fun diagnosticText(throwable: Throwable): String =
+        throwable.causes()
+            .mapNotNull { it.message }
+            .joinToString("\n")
+            .lowercase()
+
+    private fun Throwable.causes(): Sequence<Throwable> =
+        generateSequence(this) { current -> current.cause?.takeUnless { it === current } }
+            .take(MAX_CAUSE_DEPTH)
+
+    private const val TAG = "NuvClip"
+    private const val PREFERENCES_NAME = "nuvclip_download_engine"
+    private const val KEY_LAST_RECOVERY_UPDATE_ATTEMPT = "last_recovery_update_attempt"
+    private const val RECOVERY_UPDATE_COOLDOWN_MS = 15L * 60 * 1000
+    private const val MAX_CAUSE_DEPTH = 8
+
+    private val NETWORK_ERROR_MARKERS = listOf(
+        "temporary failure in name resolution",
+        "name or service not known",
+        "network is unreachable",
+        "connection timed out",
+        "read timed out",
+        "connection reset",
+        "no route to host",
+    )
 }

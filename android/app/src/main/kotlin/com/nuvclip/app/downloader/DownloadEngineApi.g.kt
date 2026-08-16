@@ -440,6 +440,12 @@ data class DownloadRequest (
    */
   val audioOnly: Boolean,
   /**
+   * Altura elegida en video. Permite volver a analizar y escoger el formato
+   * equivalente si una actualización de yt-dlp cambia sus ids internos.
+   * Es nula en modo audio.
+   */
+  val requestedHeight: Long? = null,
+  /**
    * Tamaño aproximado que ya se conocia desde el analisis (seccion 4, Vista
    * previa). Se reenvia para que el progreso pueda mostrar MB descargados
    * sin que Kotlin tenga que volver a inferirlo.
@@ -456,8 +462,9 @@ data class DownloadRequest (
       val suggestedFileName = pigeonVar_list[4] as String
       val wifiOnly = pigeonVar_list[5] as Boolean
       val audioOnly = pigeonVar_list[6] as Boolean
-      val approxTotalBytes = pigeonVar_list[7] as Long?
-      return DownloadRequest(downloadId, sourceUrl, platform, formatId, suggestedFileName, wifiOnly, audioOnly, approxTotalBytes)
+      val requestedHeight = pigeonVar_list[7] as Long?
+      val approxTotalBytes = pigeonVar_list[8] as Long?
+      return DownloadRequest(downloadId, sourceUrl, platform, formatId, suggestedFileName, wifiOnly, audioOnly, requestedHeight, approxTotalBytes)
     }
   }
   fun toList(): List<Any?> {
@@ -469,6 +476,7 @@ data class DownloadRequest (
       suggestedFileName,
       wifiOnly,
       audioOnly,
+      requestedHeight,
       approxTotalBytes,
     )
   }
@@ -480,7 +488,7 @@ data class DownloadRequest (
       return true
     }
     val other = other as DownloadRequest
-    return DownloadEngineApiPigeonUtils.deepEquals(this.downloadId, other.downloadId) && DownloadEngineApiPigeonUtils.deepEquals(this.sourceUrl, other.sourceUrl) && DownloadEngineApiPigeonUtils.deepEquals(this.platform, other.platform) && DownloadEngineApiPigeonUtils.deepEquals(this.formatId, other.formatId) && DownloadEngineApiPigeonUtils.deepEquals(this.suggestedFileName, other.suggestedFileName) && DownloadEngineApiPigeonUtils.deepEquals(this.wifiOnly, other.wifiOnly) && DownloadEngineApiPigeonUtils.deepEquals(this.audioOnly, other.audioOnly) && DownloadEngineApiPigeonUtils.deepEquals(this.approxTotalBytes, other.approxTotalBytes)
+    return DownloadEngineApiPigeonUtils.deepEquals(this.downloadId, other.downloadId) && DownloadEngineApiPigeonUtils.deepEquals(this.sourceUrl, other.sourceUrl) && DownloadEngineApiPigeonUtils.deepEquals(this.platform, other.platform) && DownloadEngineApiPigeonUtils.deepEquals(this.formatId, other.formatId) && DownloadEngineApiPigeonUtils.deepEquals(this.suggestedFileName, other.suggestedFileName) && DownloadEngineApiPigeonUtils.deepEquals(this.wifiOnly, other.wifiOnly) && DownloadEngineApiPigeonUtils.deepEquals(this.audioOnly, other.audioOnly) && DownloadEngineApiPigeonUtils.deepEquals(this.requestedHeight, other.requestedHeight) && DownloadEngineApiPigeonUtils.deepEquals(this.approxTotalBytes, other.approxTotalBytes)
   }
 
   override fun hashCode(): Int {
@@ -492,11 +500,12 @@ data class DownloadRequest (
     result = 31 * result + DownloadEngineApiPigeonUtils.deepHash(this.suggestedFileName)
     result = 31 * result + DownloadEngineApiPigeonUtils.deepHash(this.wifiOnly)
     result = 31 * result + DownloadEngineApiPigeonUtils.deepHash(this.audioOnly)
+    result = 31 * result + DownloadEngineApiPigeonUtils.deepHash(this.requestedHeight)
     result = 31 * result + DownloadEngineApiPigeonUtils.deepHash(this.approxTotalBytes)
     return result
   }
   override fun toString(): String {
-    return "DownloadRequest(downloadId=$downloadId, sourceUrl=$sourceUrl, platform=$platform, formatId=$formatId, suggestedFileName=$suggestedFileName, wifiOnly=$wifiOnly, audioOnly=$audioOnly, approxTotalBytes=$approxTotalBytes)"
+    return "DownloadRequest(downloadId=$downloadId, sourceUrl=$sourceUrl, platform=$platform, formatId=$formatId, suggestedFileName=$suggestedFileName, wifiOnly=$wifiOnly, audioOnly=$audioOnly, requestedHeight=$requestedHeight, approxTotalBytes=$approxTotalBytes)"
   }
 }
 
@@ -761,6 +770,29 @@ class DownloadEngineFlutterApi(private val binaryMessenger: BinaryMessenger, pri
     /** The codec used by DownloadEngineFlutterApi. */
     val codec: MessageCodec<Any?> by lazy {
       DownloadEngineApiPigeonCodec()
+    }
+  }
+  /**
+   * Push transitorio: `analyzeUrl` detecto EXTRACTOR_OUTDATED, esta
+   * descargando un yt-dlp nuevo y va a reintentar el analisis original
+   * automaticamente. Sin esto la UI no tiene forma de distinguir esta
+   * espera extra de un analisis normal.
+   */
+  fun onExtractorAutoUpdating(callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.nuvclip.DownloadEngineFlutterApi.onExtractorAutoUpdating$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(null) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(DownloadEngineApiPigeonUtils.createConnectionError(channelName)))
+      } 
     }
   }
   fun onDownloadProgress(downloadIdArg: String, percentArg: Double, etaSecondsArg: Long?, downloadedBytesArg: Long, totalBytesArg: Long?, callback: (Result<Unit>) -> Unit)

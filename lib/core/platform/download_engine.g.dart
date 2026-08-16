@@ -352,6 +352,7 @@ class DownloadRequest {
     required this.suggestedFileName,
     required this.wifiOnly,
     required this.audioOnly,
+    this.requestedHeight,
     this.approxTotalBytes,
   });
 
@@ -378,6 +379,11 @@ class DownloadRequest {
   /// yt-dlp.
   bool audioOnly;
 
+  /// Altura elegida en video. Permite volver a analizar y escoger el formato
+  /// equivalente si una actualización de yt-dlp cambia sus ids internos.
+  /// Es nula en modo audio.
+  int? requestedHeight;
+
   /// Tamaño aproximado que ya se conocia desde el analisis (seccion 4, Vista
   /// previa). Se reenvia para que el progreso pueda mostrar MB descargados
   /// sin que Kotlin tenga que volver a inferirlo.
@@ -392,6 +398,7 @@ class DownloadRequest {
       suggestedFileName,
       wifiOnly,
       audioOnly,
+      requestedHeight,
       approxTotalBytes,
     ];
   }
@@ -409,7 +416,8 @@ class DownloadRequest {
       suggestedFileName: result[4]! as String,
       wifiOnly: result[5]! as bool,
       audioOnly: result[6]! as bool,
-      approxTotalBytes: result[7] as int?,
+      requestedHeight: result[7] as int?,
+      approxTotalBytes: result[8] as int?,
     );
   }
 
@@ -422,7 +430,7 @@ class DownloadRequest {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(downloadId, other.downloadId) && _deepEquals(sourceUrl, other.sourceUrl) && _deepEquals(platform, other.platform) && _deepEquals(formatId, other.formatId) && _deepEquals(suggestedFileName, other.suggestedFileName) && _deepEquals(wifiOnly, other.wifiOnly) && _deepEquals(audioOnly, other.audioOnly) && _deepEquals(approxTotalBytes, other.approxTotalBytes);
+    return _deepEquals(downloadId, other.downloadId) && _deepEquals(sourceUrl, other.sourceUrl) && _deepEquals(platform, other.platform) && _deepEquals(formatId, other.formatId) && _deepEquals(suggestedFileName, other.suggestedFileName) && _deepEquals(wifiOnly, other.wifiOnly) && _deepEquals(audioOnly, other.audioOnly) && _deepEquals(requestedHeight, other.requestedHeight) && _deepEquals(approxTotalBytes, other.approxTotalBytes);
   }
 
   @override
@@ -431,7 +439,7 @@ class DownloadRequest {
 
   @override
   String toString() {
-    return 'DownloadRequest(downloadId: $downloadId, sourceUrl: $sourceUrl, platform: $platform, formatId: $formatId, suggestedFileName: $suggestedFileName, wifiOnly: $wifiOnly, audioOnly: $audioOnly, approxTotalBytes: $approxTotalBytes)';
+    return 'DownloadRequest(downloadId: $downloadId, sourceUrl: $sourceUrl, platform: $platform, formatId: $formatId, suggestedFileName: $suggestedFileName, wifiOnly: $wifiOnly, audioOnly: $audioOnly, requestedHeight: $requestedHeight, approxTotalBytes: $approxTotalBytes)';
   }
 }
 
@@ -679,6 +687,12 @@ class DownloadEngineHostApi {
 abstract class DownloadEngineFlutterApi {
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
 
+  /// Push transitorio: `analyzeUrl` detecto EXTRACTOR_OUTDATED, esta
+  /// descargando un yt-dlp nuevo y va a reintentar el analisis original
+  /// automaticamente. Sin esto la UI no tiene forma de distinguir esta
+  /// espera extra de un analisis normal.
+  void onExtractorAutoUpdating();
+
   void onDownloadProgress(String downloadId, double percent, int? etaSeconds, int downloadedBytes, int? totalBytes);
 
   void onDownloadCompleted(String downloadId, String savedUri, String fileName, int sizeBytes);
@@ -687,6 +701,25 @@ abstract class DownloadEngineFlutterApi {
 
   static void setUp(DownloadEngineFlutterApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.nuvclip.DownloadEngineFlutterApi.onExtractorAutoUpdating$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          try {
+            api.onExtractorAutoUpdating();
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
           'dev.flutter.pigeon.nuvclip.DownloadEngineFlutterApi.onDownloadProgress$messageChannelSuffix', pigeonChannelCodec,

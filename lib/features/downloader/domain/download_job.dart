@@ -16,6 +16,7 @@ class DownloadJobState {
     this.completed,
     this.errorCode,
     this.errorDetail,
+    this.updatingExtractor = false,
   });
 
   final DownloadStage stage;
@@ -35,6 +36,12 @@ class DownloadJobState {
   final DownloadErrorCode? errorCode;
   final String? errorDetail;
 
+  /// true entre el momento en que `analyzeUrl` detecta un extractor
+  /// desactualizado y reintenta, y el resultado de ese reintento. Distingue
+  /// esa espera extra de un analisis normal en la UI (ver
+  /// [EngineBridge.onExtractorAutoUpdating]).
+  final bool updatingExtractor;
+
   bool get isBusy => stage == DownloadStage.analyzing || stage == DownloadStage.downloading;
 
   DownloadJobState copyWith({
@@ -51,6 +58,7 @@ class DownloadJobState {
     DownloadCompletedEvent? completed,
     DownloadErrorCode? errorCode,
     String? errorDetail,
+    bool? updatingExtractor,
   }) {
     return DownloadJobState(
       stage: stage ?? this.stage,
@@ -65,6 +73,7 @@ class DownloadJobState {
       completed: completed ?? this.completed,
       errorCode: errorCode,
       errorDetail: errorDetail,
+      updatingExtractor: updatingExtractor ?? this.updatingExtractor,
     );
   }
 }

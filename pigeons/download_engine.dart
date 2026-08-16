@@ -98,6 +98,11 @@ class DownloadRequest {
   /// yt-dlp.
   late bool audioOnly;
 
+  /// Altura elegida en video. Permite volver a analizar y escoger el formato
+  /// equivalente si una actualización de yt-dlp cambia sus ids internos.
+  /// Es nula en modo audio.
+  int? requestedHeight;
+
   /// Tamaño aproximado que ya se conocia desde el analisis (seccion 4, Vista
   /// previa). Se reenvia para que el progreso pueda mostrar MB descargados
   /// sin que Kotlin tenga que volver a inferirlo.
@@ -136,6 +141,12 @@ abstract class DownloadEngineHostApi {
 
 @FlutterApi()
 abstract class DownloadEngineFlutterApi {
+  /// Push transitorio: `analyzeUrl` detecto EXTRACTOR_OUTDATED, esta
+  /// descargando un yt-dlp nuevo y va a reintentar el analisis original
+  /// automaticamente. Sin esto la UI no tiene forma de distinguir esta
+  /// espera extra de un analisis normal.
+  void onExtractorAutoUpdating();
+
   void onDownloadProgress(
     String downloadId,
     double percent,
